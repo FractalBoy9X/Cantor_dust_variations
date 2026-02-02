@@ -1,0 +1,2511 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Infinite Fractal Zoom - 11 Shapes</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; font-family: 'Rajdhani', sans-serif; }
+
+    #canvas-container { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; cursor: crosshair; }
+
+    .ui-overlay { position: fixed; z-index: 100; pointer-events: none; }
+
+    .title-panel {
+      top: 15px; left: 50%; transform: translateX(-50%);
+      text-align: center;
+    }
+    .title-panel h1 {
+      font-family: 'Orbitron', monospace;
+      font-size: 1.8rem; font-weight: 900;
+      color: #cc66ff;
+      text-shadow: 0 0 10px #cc66ff;
+      letter-spacing: 0.3em;
+    }
+    .title-panel .subtitle {
+      font-size: 0.75rem; color: #556; letter-spacing: 0.2em;
+    }
+
+    .stats-panel {
+      top: auto; bottom: 85px; right: 20px; text-align: right;
+      background: rgba(0,0,0,0.85);
+      padding: 15px 20px; border-radius: 8px;
+      border: 1px solid #cc66ff44;
+    }
+    .stat-row { margin-bottom: 8px; }
+    .stat-row:last-child { margin-bottom: 0; }
+    .stat-label {
+      font-size: 0.6rem; color: #556;
+      letter-spacing: 0.15em; text-transform: uppercase;
+    }
+    .stat-value {
+      font-family: 'Orbitron', monospace;
+      font-size: 1.3rem; font-weight: 700; color: #cc66ff;
+    }
+    .stat-value.large { font-size: 2.2rem; }
+
+    .crosshair {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none; z-index: 90;
+    }
+    .crosshair::before, .crosshair::after {
+      content: ''; position: absolute; background: #cc66ff55;
+    }
+    .crosshair::before {
+      width: 28px; height: 2px;
+      top: 50%; left: 50%; transform: translate(-50%, -50%);
+    }
+    .crosshair::after {
+      width: 2px; height: 28px;
+      top: 50%; left: 50%; transform: translate(-50%, -50%);
+    }
+
+    .controls-help {
+      bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.85);
+      padding: 12px 25px; border-radius: 8px;
+      border: 1px solid #cc66ff33;
+      font-size: 0.65rem;
+    }
+    .controls-help span { color: #cc66ff; font-family: 'Orbitron', monospace; }
+    .controls-help .sep { color: #333; margin: 0 8px; }
+
+    .zoom-progress {
+      position: fixed;
+      bottom: 70px; left: 50%; transform: translateX(-50%);
+      width: 350px; text-align: center;
+    }
+    .zoom-bar {
+      height: 10px; background: #0a0a0a;
+      border-radius: 5px; overflow: hidden;
+      border: 1px solid #cc66ff44;
+    }
+    .zoom-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #cc66ff, #ff66cc);
+      transition: width 0.05s;
+    }
+    .zoom-labels {
+      display: flex; justify-content: space-between;
+      font-size: 0.7rem; margin-top: 6px;
+      font-family: 'Orbitron', monospace;
+    }
+    .zoom-labels .current { color: #cc66ff; }
+    .zoom-labels .next { color: #ffcc00; }
+
+    .modal-overlay {
+      position: fixed; top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background: rgba(0, 0, 0, 0.92);
+      display: none; justify-content: center; align-items: center;
+      z-index: 200;
+    }
+    .modal-overlay.active { display: flex; }
+
+    .modal {
+      background: linear-gradient(145deg, #0a0812, #1a1025);
+      border: 2px solid #cc66ff;
+      border-radius: 15px;
+      padding: 40px 55px; text-align: center;
+      box-shadow: 0 0 80px #cc66ff33;
+    }
+    .modal h2 {
+      font-family: 'Orbitron', monospace;
+      color: #cc66ff; font-size: 1.4rem;
+      letter-spacing: 0.2em; margin-bottom: 25px;
+    }
+    .modal-depth {
+      font-family: 'Orbitron', monospace;
+      color: #ffcc00; font-size: 3.5rem;
+      font-weight: 900; margin: 25px 0;
+      text-shadow: 0 0 30px #ffcc0044;
+    }
+    .modal-info {
+      color: #99a; font-size: 1.1rem; margin-bottom: 30px;
+    }
+    .modal-info strong { color: #cc66ff; font-size: 1.3rem; }
+    .modal-buttons { display: flex; gap: 20px; justify-content: center; }
+    .modal-btn {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.95rem;
+      padding: 15px 45px; border-radius: 6px;
+      cursor: pointer; transition: all 0.2s;
+      letter-spacing: 0.1em; pointer-events: auto;
+    }
+    .modal-btn.confirm {
+      background: linear-gradient(135deg, #cc66ff, #9933ff);
+      color: #fff; border: none; font-weight: bold;
+    }
+    .modal-btn.confirm:hover {
+      box-shadow: 0 0 30px #cc66ff88;
+      transform: scale(1.05);
+    }
+    .modal-btn.cancel {
+      background: transparent; color: #ff6666;
+      border: 2px solid #ff666666;
+    }
+    .modal-btn.cancel:hover {
+      background: #ff666622;
+      border-color: #ff6666;
+    }
+
+    .flash {
+      position: fixed; top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      background: radial-gradient(circle, #cc66ff55 0%, transparent 70%);
+      pointer-events: none; opacity: 0; z-index: 50;
+      transition: opacity 0.2s;
+    }
+    .flash.active { opacity: 1; }
+
+    .depth-indicator {
+      position: fixed;
+      top: 50%; left: 25px;
+      transform: translateY(-50%);
+      pointer-events: none;
+    }
+    .depth-bar-v {
+      width: 10px; height: 280px;
+      background: #0a0a0a; border-radius: 5px;
+      border: 1px solid #cc66ff33;
+      position: relative;
+    }
+    .depth-fill-v {
+      position: absolute; bottom: 0; width: 100%;
+      background: linear-gradient(to top, #cc66ff, #ff6699);
+      border-radius: 5px;
+      transition: height 0.2s;
+    }
+    .depth-labels-v {
+      position: absolute; left: 20px; top: 0;
+      height: 100%;
+      display: flex; flex-direction: column;
+      justify-content: space-between;
+    }
+    .depth-label-v {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.65rem; color: #334;
+      transition: all 0.2s;
+    }
+    .depth-label-v.active {
+      color: #cc66ff;
+      text-shadow: 0 0 8px #cc66ff;
+    }
+
+    .shape-selector {
+      position: fixed;
+      top: 15px; left: 20px;
+      z-index: 100;
+      pointer-events: auto;
+      max-height: calc(100vh - 100px);
+      overflow-y: auto;
+    }
+    .shape-btn {
+      display: block;
+      background: rgba(0,0,0,0.7);
+      border: 1px solid #333;
+      color: #666;
+      padding: 6px 12px;
+      margin-bottom: 4px;
+      font-family: 'Orbitron', monospace;
+      font-size: 0.6rem;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-radius: 4px;
+    }
+    .shape-btn:hover {
+      border-color: #cc66ff66;
+      color: #cc66ff99;
+    }
+    .shape-btn.active {
+      border-color: #cc66ff;
+      color: #cc66ff;
+      background: rgba(204, 102, 255, 0.15);
+    }
+    .shape-btn.new-shape {
+      border-color: #ffcc00;
+      color: #ffcc00;
+      animation: pulse-gold 2s infinite;
+    }
+    .shape-btn.new-shape.active {
+      background: rgba(255, 204, 0, 0.15);
+      animation: none;
+    }
+    @keyframes pulse-gold {
+      0%, 100% { box-shadow: 0 0 5px #ffcc0044; }
+      50% { box-shadow: 0 0 15px #ffcc0088; }
+    }
+
+    .geometry-panel {
+      position: fixed;
+      top: 15px; right: 20px;
+      z-index: 100;
+      pointer-events: auto;
+    }
+
+    .geometry-toggle {
+      background: rgba(0,0,0,0.85);
+      border: 1px solid #cc66ff44;
+      color: #cc66ff;
+      padding: 8px 15px;
+      font-family: 'Orbitron', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      border-radius: 8px 8px 0 0;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .geometry-toggle:hover {
+      background: rgba(204, 102, 255, 0.15);
+    }
+
+    .geometry-toggle .arrow {
+      transition: transform 0.3s;
+    }
+
+    .geometry-toggle.open .arrow {
+      transform: rotate(180deg);
+    }
+
+    .geometry-content {
+      background: rgba(0,0,0,0.92);
+      border: 1px solid #cc66ff44;
+      border-top: none;
+      border-radius: 0 0 8px 8px;
+      padding: 0;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.4s ease, padding 0.3s;
+    }
+
+    .geometry-content.open {
+      max-height: 600px;
+      padding: 15px 20px;
+      overflow-y: auto;
+    }
+
+    .geometry-section {
+      margin-bottom: 15px;
+    }
+
+    .geometry-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .geometry-section-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.65rem;
+      color: #cc66ff;
+      letter-spacing: 0.15em;
+      margin-bottom: 8px;
+      border-bottom: 1px solid #cc66ff33;
+      padding-bottom: 4px;
+    }
+
+    .geometry-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .geometry-table td {
+      padding: 4px 0;
+      font-size: 0.75rem;
+    }
+
+    .geometry-table td:first-child {
+      color: #667;
+      width: 50%;
+    }
+
+    .geometry-table td:last-child {
+      color: #aab;
+      text-align: right;
+      font-family: 'Orbitron', monospace;
+    }
+
+    .geometry-formula {
+      background: rgba(204, 102, 255, 0.1);
+      border-left: 2px solid #cc66ff55;
+      padding: 8px 12px;
+      margin: 5px 0;
+      font-family: 'Courier New', monospace;
+      font-size: 0.7rem;
+      color: #ccaaff;
+      overflow-x: auto;
+    }
+
+    .geometry-formula .label {
+      color: #667;
+      font-size: 0.6rem;
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    .coords-toggle {
+      background: rgba(204, 102, 255, 0.15);
+      border: 1px solid #cc66ff44;
+      color: #cc66ff;
+      padding: 5px 10px;
+      font-family: 'Orbitron', monospace;
+      font-size: 0.6rem;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      border-radius: 4px;
+      margin-top: 8px;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .coords-toggle:hover {
+      background: rgba(204, 102, 255, 0.25);
+      border-color: #cc66ff;
+    }
+
+    .coords-toggle .arrow {
+      transition: transform 0.3s;
+      font-size: 0.5rem;
+    }
+
+    .coords-toggle.open .arrow {
+      transform: rotate(180deg);
+    }
+
+    .coords-details {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.4s ease;
+    }
+
+    .coords-details.open {
+      max-height: 400px;
+    }
+
+    .coords-calculation {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid #cc66ff22;
+      border-radius: 4px;
+      padding: 10px 12px;
+      margin-top: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.65rem;
+      line-height: 1.6;
+    }
+
+    .coords-calculation .calc-title {
+      color: #ffcc00;
+      font-family: 'Orbitron', monospace;
+      font-size: 0.6rem;
+      margin-bottom: 6px;
+      letter-spacing: 0.1em;
+    }
+
+    .coords-calculation .calc-step {
+      color: #99a;
+      margin: 4px 0;
+    }
+
+    .coords-calculation .calc-step .num {
+      color: #66ffaa;
+    }
+
+    .coords-calculation .calc-step .var {
+      color: #ff99cc;
+    }
+
+    .coords-calculation .calc-step .result {
+      color: #ffcc00;
+    }
+
+    .coords-calculation .calc-vertices {
+      color: #aabbcc;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #cc66ff22;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+
+    .hausdorff {
+      color: #ffcc00;
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="canvas-container"></div>
+  <div class="crosshair"></div>
+  <div class="flash" id="flash"></div>
+
+  <div class="ui-overlay title-panel">
+    <h1>FRACTAL DIVE</h1>
+    <div class="subtitle" id="shape-subtitle">TILED 32-HEDRON RECURSION</div>
+  </div>
+
+  <div class="shape-selector">
+    <button class="shape-btn" data-shape="cube">1. CUBE (8)</button>
+    <button class="shape-btn" data-shape="octahedron">2. OCTAHEDRON (6)</button>
+    <button class="shape-btn" data-shape="tetrahedron">3. TETRAHEDRON (4)</button>
+    <button class="shape-btn" data-shape="dodecahedron">4. DODECAHEDRON (20)</button>
+    <button class="shape-btn" data-shape="irregular">5. IRREGULAR (12)</button>
+    <button class="shape-btn" data-shape="truncatedCube">6. TRUNCATED CUBE (24)</button>
+    <button class="shape-btn" data-shape="icosidodecahedron">7. ICOSIDODECA (30)</button>
+    <button class="shape-btn" data-shape="cantorDust">8. CANTOR DUST</button>
+    <button class="shape-btn active" data-shape="tiled32">9. TILED 32-HEDRON</button>
+    <button class="shape-btn new-shape" data-shape="tiled32v2">10. ⭐ TILED32 v2</button>
+    <button class="shape-btn new-shape" data-shape="rudinShapiro">11. ⭐ RUDIN-SHAPIRO</button>
+  </div>
+
+  <div class="geometry-panel">
+    <button class="geometry-toggle" id="geometry-toggle">
+      <span>◆ GEOMETRY INFO</span>
+      <span class="arrow">▼</span>
+    </button>
+    <div class="geometry-content" id="geometry-content">
+      <div class="geometry-section">
+        <div class="geometry-section-title">POLYHEDRON PROPERTIES</div>
+        <table class="geometry-table">
+          <tr><td>Faces</td><td id="geo-faces">32</td></tr>
+          <tr><td>Edges</td><td id="geo-edges">60</td></tr>
+          <tr><td>Vertices</td><td id="geo-vertices">30</td></tr>
+          <tr><td>Type</td><td id="geo-type">Archimedean</td></tr>
+        </table>
+      </div>
+      <div class="geometry-section">
+        <div class="geometry-section-title">VERTEX COORDINATES</div>
+        <div class="geometry-formula" id="geo-coords"></div>
+        <button class="coords-toggle" id="coords-toggle">
+          <span>SHOW CALCULATIONS</span>
+          <span class="arrow">▼</span>
+        </button>
+        <div class="coords-details" id="coords-details">
+          <div class="coords-calculation" id="coords-calculation"></div>
+        </div>
+      </div>
+      <div class="geometry-section">
+        <div class="geometry-section-title">FACE COMPOSITION</div>
+        <table class="geometry-table">
+          <tr><td>Triangles</td><td id="geo-tri">20</td></tr>
+          <tr><td id="geo-pent-label">Pentagons</td><td id="geo-pent">12</td></tr>
+          <tr><td>Vertex config</td><td id="geo-vconfig">3.5.3.5</td></tr>
+        </table>
+      </div>
+      <div class="geometry-section">
+        <div class="geometry-section-title">FRACTAL PARAMETERS</div>
+        <table class="geometry-table">
+          <tr><td>Children per level</td><td id="geo-children">30</td></tr>
+          <tr><td>Scale factor</td><td id="geo-scale">0.16</td></tr>
+          <tr><td>Max depth</td><td id="geo-maxdepth">3</td></tr>
+        </table>
+        <div class="geometry-formula">
+          <span class="label">Hausdorff dimension</span>
+          D = log(N) / log(1/s) = <span class="hausdorff" id="geo-hausdorff">1.86</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ui-overlay stats-panel">
+    <div class="stat-row">
+      <div class="stat-label">Current Depth</div>
+      <div class="stat-value large" id="depth-value">0</div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-label">Shapes Rendered</div>
+      <div class="stat-value" id="cubes-value">1</div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-label">Formula</div>
+      <div class="stat-value" id="formula-value" style="font-size: 0.9rem;">N⁰ = 1</div>
+    </div>
+  </div>
+
+  <div class="depth-indicator">
+    <div class="depth-bar-v">
+      <div class="depth-fill-v" id="depth-fill"></div>
+    </div>
+    <div class="depth-labels-v" id="depth-labels"></div>
+  </div>
+
+  <div class="zoom-progress">
+    <div class="zoom-bar">
+      <div class="zoom-fill" id="zoom-fill" style="width: 0%"></div>
+    </div>
+    <div class="zoom-labels">
+      <span class="current">DEPTH <span id="current-d">0</span></span>
+      <span class="next">→ DEPTH <span id="next-d">1</span></span>
+    </div>
+  </div>
+
+  <div class="ui-overlay controls-help">
+    <span>WASD</span> move <span class="sep">|</span>
+    <span>QE</span> up/down <span class="sep">|</span>
+    <span>MOUSE</span> look <span class="sep">|</span>
+    <span>SCROLL</span> zoom <span class="sep">|</span>
+    <span>R</span> reset <span class="sep">|</span>
+    <span>1-9,0,-</span> shape
+  </div>
+
+  <div class="modal-overlay" id="modal">
+    <div class="modal">
+      <h2 id="modal-title">ENTER NEXT LEVEL?</h2>
+      <div class="modal-depth" id="modal-depth">DEPTH 1</div>
+      <div class="modal-info">
+        <strong id="modal-cubes">24</strong> shapes await
+      </div>
+      <div class="modal-buttons">
+        <button class="modal-btn confirm" id="modal-confirm">DIVE IN</button>
+        <button class="modal-btn cancel" id="modal-cancel">STAY</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const CLUSTER_COLORS = [
+      0xff3366, 0x33ff66, 0x3366ff, 0xffcc33,
+      0xcc33ff, 0x33ffcc, 0xff33cc, 0xccff33,
+      0xff8844, 0x88ff44, 0x4488ff, 0xff4488,
+      0xaa66ff, 0x66ffaa, 0xff66aa, 0xaaff66,
+      0x6699ff, 0xff9966, 0x99ff66, 0x66ff99,
+      0x9966ff, 0xff6699, 0x66aaff, 0xffaa66,
+      0xdd5533, 0x33dd55, 0x5533dd, 0xdddd33,
+      0xdd33dd, 0x33dddd
+    ];
+
+    // =========================
+    // GEOMETRY INFO DATABASE
+    // =========================
+    const GEOMETRY_INFO = {
+      cube: {
+        faces: 6, edges: 12, vertices: 8,
+        type: 'Platonic',
+        triangles: 0, squares: 6, pentagons: 0, octagons: 0,
+        vertexConfig: '4.4.4',
+        formula: 'All permutations of (±a, ±a, ±a)',
+        calculations: `
+          <div class="calc-title">CUBE VERTEX CALCULATION</div>
+          <div class="calc-step">Edge length: <span class="var">a</span> = <span class="num">1</span></div>
+          <div class="calc-step">Half-edge: <span class="var">h</span> = <span class="var">a</span>/2</div>
+        `
+      },
+      octahedron: {
+        faces: 8, edges: 12, vertices: 6,
+        type: 'Platonic',
+        triangles: 8, squares: 0, pentagons: 0, octagons: 0,
+        vertexConfig: '3.3.3.3',
+        formula: 'Vertices on coordinate axes at distance a',
+        calculations: `
+          <div class="calc-title">OCTAHEDRON VERTEX CALCULATION</div>
+          <div class="calc-step">Circumradius: <span class="var">r</span> = <span class="num">1</span></div>
+        `
+      },
+      tetrahedron: {
+        faces: 4, edges: 6, vertices: 4,
+        type: 'Platonic',
+        triangles: 4, squares: 0, pentagons: 0, octagons: 0,
+        vertexConfig: '3.3.3',
+        formula: 'Alternating vertices of a cube',
+        calculations: `
+          <div class="calc-title">TETRAHEDRON VERTEX CALCULATION</div>
+          <div class="calc-step">Method: Select alternating vertices</div>
+        `
+      },
+      dodecahedron: {
+        faces: 12, edges: 30, vertices: 20,
+        type: 'Platonic',
+        triangles: 0, squares: 0, pentagons: 12, octagons: 0,
+        vertexConfig: '5.5.5',
+        formula: '<span class="label">Golden ratio: φ = (1+√5)/2</span>(±1, ±1, ±1)<br>(0, ±1/φ, ±φ) and cyclic perms',
+        calculations: `
+          <div class="calc-title">DODECAHEDRON VERTEX CALCULATION</div>
+          <div class="calc-step">Golden ratio: <span class="var">φ</span> = (1+√5)/2 ≈ <span class="num">1.618</span></div>
+        `
+      },
+      irregular: {
+        faces: 20, edges: 30, vertices: 12,
+        type: 'Distorted Icosahedron',
+        triangles: 20, squares: 0, pentagons: 0, octagons: 0,
+        vertexConfig: '3.3.3.3.3',
+        formula: 'v\' = v × (1 + random × 0.55)<br>Seeded RNG for consistency',
+        calculations: `
+          <div class="calc-title">IRREGULAR ICOSAHEDRON</div>
+          <div class="calc-step">Base: Regular icosahedron (12 vertices)</div>
+          <div class="calc-step">RNG seed: <span class="num">1337</span></div>
+        `
+      },
+      truncatedCube: {
+        faces: 14, edges: 36, vertices: 24,
+        type: 'Archimedean',
+        triangles: 8, squares: 0, pentagons: 0, octagons: 6,
+        vertexConfig: '3.8.8',
+        formula: '<span class="label">Truncation: t = √2−1</span>For each corner:<br>3 vertices at (±(1−t), ±1, ±1) perms',
+        calculations: `
+          <div class="calc-title">TRUNCATED CUBE</div>
+          <div class="calc-step">Truncation: <span class="var">t</span> = √2 − 1 ≈ <span class="num">0.4142</span></div>
+        `
+      },
+      icosidodecahedron: {
+        faces: 32, edges: 60, vertices: 30,
+        type: 'Archimedean',
+        triangles: 20, squares: 0, pentagons: 12, octagons: 0,
+        vertexConfig: '3.5.3.5',
+        formula: '<span class="label">Golden ratio: φ</span>(0, 0, ±φ), (0, ±φ, 0), (±φ, 0, 0)<br>(±½, ±φ/2, ±(1+φ)/2) perms',
+        calculations: `
+          <div class="calc-title">ICOSIDODECAHEDRON</div>
+          <div class="calc-step">30 vertices, 32 faces (20△ + 12⬠)</div>
+        `
+      },
+      cantorDust: {
+        faces: 6, edges: 12, vertices: 8,
+        type: 'Fractal (Cantor Set 3D)',
+        triangles: 0, squares: 6, pentagons: 0, octagons: 0,
+        vertexConfig: '4.4.4',
+        formula: '<span class="label">3D Cantor Dust</span>Divide cube into 3×3×3 = 27 parts<br>Keep only 8 corner cubes, repeat',
+        calculations: `
+          <div class="calc-title">CANTOR DUST CONSTRUCTION</div>
+          <div class="calc-step"><b>Step 1:</b> Start with unit cube</div>
+          <div class="calc-step"><b>Step 2:</b> Divide into 3×3×3 = <span class="num">27</span> sub-cubes</div>
+          <div class="calc-step"><b>Step 3:</b> Keep only <span class="num">8</span> corners</div>
+          <div class="calc-step">Hausdorff: D = log(8)/log(3) ≈ <span class="result">1.893</span></div>
+        `
+      },
+      tiled32: {
+        faces: 32, edges: 60, vertices: 30,
+        type: 'Tiled Archimedean',
+        triangles: 20, squares: 0, pentagons: 12, octagons: 0,
+        vertexConfig: '3.5.3.5 + Tiling',
+        formula: '<span class="label">TILED 32-HEDRON</span>32 faces with Cantor pattern<br>Children at 30 vertices',
+        calculations: `
+          <div class="calc-title">TILED 32-HEDRON</div>
+          <div class="calc-step"><b>Base:</b> Icosidodecahedron</div>
+          <div class="calc-step">• Triangles: subdivide 3×3</div>
+          <div class="calc-step">• Pentagons: radial subdivision</div>
+        `
+      },
+      tiled32v2: {
+        faces: 32, edges: 60, vertices: 30,
+        type: 'Tiled Archimedean v2',
+        triangles: 20, squares: 0, pentagons: 12, octagons: 0,
+        vertexConfig: '3.5.3.5 + Tile Vertices',
+        formula: '<span class="label">TILED32 v2 (Cantor-style)</span>Children at tile VERTICES<br>Like Cantor Dust but on 32 faces',
+        calculations: `
+          <div class="calc-title">TILED32 v2 CONSTRUCTION</div>
+          <div class="calc-step"><b>Algorithm:</b> Like Cantor Dust</div>
+          <div class="calc-step">• Subdivide each face into tiles</div>
+          <div class="calc-step">• Place children at tile vertices</div>
+          <div class="calc-step">• Deduplicate shared vertices</div>
+          <div class="calc-step" style="margin-top:8px"><b>Result:</b></div>
+          <div class="calc-step">~92 unique tile vertices on 32 faces</div>
+        `
+      },
+      rudinShapiro: {
+        faces: 6, edges: 12, vertices: 8,
+        type: 'Aperiodic Fractal',
+        triangles: 0, squares: 6, pentagons: 0, octagons: 0,
+        vertexConfig: '4.4.4 (aperiodic)',
+        formula: '<span class="label">Aperiodic 2D sequence</span>a[k] = popcount(k & (k>>1)) mod 2<br>grid[i,j] = a[i] XOR a[j]',
+        calculations: `
+          <div class="calc-title">RUDIN-SHAPIRO CONSTRUCTION</div>
+          <div class="calc-step"><b>Step 1:</b> Generate 1D sequence a[k]</div>
+          <div class="calc-step" style="margin-left:10px">a[k] = parity of overlapping '11' pairs</div>
+          <div class="calc-step" style="margin-top:8px"><b>Step 2:</b> Create 2D grid</div>
+          <div class="calc-step" style="margin-left:10px">grid[i][j] = a[i] XOR a[j]</div>
+          <div class="calc-step" style="margin-top:8px"><b>Step 3:</b> Map to cube faces</div>
+          <div class="calc-step" style="margin-left:10px">Child at (i,j) if grid[i][j] = 1</div>
+          <div class="calc-step" style="margin-top:8px"><b>Properties:</b></div>
+          <div class="calc-step">• Aperiodic (never repeats)</div>
+          <div class="calc-step">• ~50% cells active</div>
+        `
+      }
+    };
+
+    // =========================
+    // UTILITY FUNCTIONS
+    // =========================
+    function getUniqueVertexDirections(geometry, decimals = 4) {
+      const pos = geometry.attributes.position;
+      const seen = new Set();
+      const dirs = [];
+      const v = new THREE.Vector3();
+
+      for (let i = 0; i < pos.count; i++) {
+        v.set(pos.getX(i), pos.getY(i), pos.getZ(i));
+        v.normalize();
+        const key = `${v.x.toFixed(decimals)},${v.y.toFixed(decimals)},${v.z.toFixed(decimals)}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          dirs.push(v.clone());
+        }
+      }
+      return dirs;
+    }
+
+    // =========================
+    // TRUNCATED CUBE GEOMETRY
+    // =========================
+    function createTruncatedCubeGeometry(size) {
+      const t = (Math.sqrt(2) - 1);
+      const a = size / 2;
+      
+      const vertices = [];
+      
+      for (let sx = -1; sx <= 1; sx += 2) {
+        for (let sy = -1; sy <= 1; sy += 2) {
+          for (let sz = -1; sz <= 1; sz += 2) {
+            vertices.push(
+              [a * sx * (1-t), a * sy, a * sz],
+              [a * sx, a * sy * (1-t), a * sz],
+              [a * sx, a * sy, a * sz * (1-t)]
+            );
+          }
+        }
+      }
+      
+      function findVertex(x, y, z) {
+        const eps = 0.0001;
+        for (let i = 0; i < vertices.length; i++) {
+          if (Math.abs(vertices[i][0] - x) < eps &&
+              Math.abs(vertices[i][1] - y) < eps &&
+              Math.abs(vertices[i][2] - z) < eps) {
+            return i;
+          }
+        }
+        return -1;
+      }
+      
+      const indices = [];
+      
+      for (let sx = -1; sx <= 1; sx += 2) {
+        for (let sy = -1; sy <= 1; sy += 2) {
+          for (let sz = -1; sz <= 1; sz += 2) {
+            const v0 = findVertex(a * sx * (1-t), a * sy, a * sz);
+            const v1 = findVertex(a * sx, a * sy * (1-t), a * sz);
+            const v2 = findVertex(a * sx, a * sy, a * sz * (1-t));
+            
+            if (sx * sy * sz > 0) {
+              indices.push(v0, v1, v2);
+            } else {
+              indices.push(v0, v2, v1);
+            }
+          }
+        }
+      }
+      
+      function addOctagonFace(verts, flip) {
+        for (let i = 1; i < 7; i++) {
+          if (flip) {
+            indices.push(verts[0], verts[i], verts[i+1]);
+          } else {
+            indices.push(verts[0], verts[i+1], verts[i]);
+          }
+        }
+      }
+      
+      addOctagonFace([
+        findVertex(a, a * (1-t), a), findVertex(a, a, a * (1-t)),
+        findVertex(a, a, -a * (1-t)), findVertex(a, a * (1-t), -a),
+        findVertex(a, -a * (1-t), -a), findVertex(a, -a, -a * (1-t)),
+        findVertex(a, -a, a * (1-t)), findVertex(a, -a * (1-t), a)
+      ], true);
+      
+      addOctagonFace([
+        findVertex(-a, a * (1-t), a), findVertex(-a, -a * (1-t), a),
+        findVertex(-a, -a, a * (1-t)), findVertex(-a, -a, -a * (1-t)),
+        findVertex(-a, -a * (1-t), -a), findVertex(-a, a * (1-t), -a),
+        findVertex(-a, a, -a * (1-t)), findVertex(-a, a, a * (1-t))
+      ], true);
+      
+      addOctagonFace([
+        findVertex(a * (1-t), a, a), findVertex(a, a, a * (1-t)),
+        findVertex(a, a, -a * (1-t)), findVertex(a * (1-t), a, -a),
+        findVertex(-a * (1-t), a, -a), findVertex(-a, a, -a * (1-t)),
+        findVertex(-a, a, a * (1-t)), findVertex(-a * (1-t), a, a)
+      ], true);
+      
+      addOctagonFace([
+        findVertex(a * (1-t), -a, a), findVertex(-a * (1-t), -a, a),
+        findVertex(-a, -a, a * (1-t)), findVertex(-a, -a, -a * (1-t)),
+        findVertex(-a * (1-t), -a, -a), findVertex(a * (1-t), -a, -a),
+        findVertex(a, -a, -a * (1-t)), findVertex(a, -a, a * (1-t))
+      ], true);
+      
+      addOctagonFace([
+        findVertex(a * (1-t), a, a), findVertex(-a * (1-t), a, a),
+        findVertex(-a, a * (1-t), a), findVertex(-a, -a * (1-t), a),
+        findVertex(-a * (1-t), -a, a), findVertex(a * (1-t), -a, a),
+        findVertex(a, -a * (1-t), a), findVertex(a, a * (1-t), a)
+      ], true);
+      
+      addOctagonFace([
+        findVertex(a * (1-t), a, -a), findVertex(a, a * (1-t), -a),
+        findVertex(a, -a * (1-t), -a), findVertex(a * (1-t), -a, -a),
+        findVertex(-a * (1-t), -a, -a), findVertex(-a, -a * (1-t), -a),
+        findVertex(-a, a * (1-t), -a), findVertex(-a * (1-t), a, -a)
+      ], true);
+      
+      const positions = [];
+      const normals = [];
+      
+      for (let i = 0; i < indices.length; i += 3) {
+        const v0 = vertices[indices[i]];
+        const v1 = vertices[indices[i + 1]];
+        const v2 = vertices[indices[i + 2]];
+        
+        positions.push(...v0, ...v1, ...v2);
+        
+        const ax = v1[0] - v0[0], ay = v1[1] - v0[1], az = v1[2] - v0[2];
+        const bx = v2[0] - v0[0], by = v2[1] - v0[1], bz = v2[2] - v0[2];
+        let nx = ay * bz - az * by;
+        let ny = az * bx - ax * bz;
+        let nz = ax * by - ay * bx;
+        const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
+        nx /= len; ny /= len; nz /= len;
+        
+        normals.push(nx, ny, nz, nx, ny, nz, nx, ny, nz);
+      }
+      
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+      
+      return geometry;
+    }
+
+    // =========================
+    // TILED CUBE GEOMETRY (Cantor Dust style)
+    // =========================
+    function createTiledCubeGeometry(size, tilesPerSide = 3) {
+      const half = size / 2;
+      const tileSize = size / tilesPerSide;
+      
+      const positions = [];
+      const normals = [];
+      const colors = [];
+      
+      const color1 = [0.20, 0.90, 0.80];
+      const color2 = [0.05, 0.08, 0.15];
+      
+      const faces = [
+        { normal: [ 0,  0,  1], center: [0, 0, half],  uAxis: [1, 0, 0], vAxis: [0, 1, 0] },
+        { normal: [ 0,  0, -1], center: [0, 0, -half], uAxis: [-1, 0, 0], vAxis: [0, 1, 0] },
+        { normal: [ 1,  0,  0], center: [half, 0, 0],  uAxis: [0, 0, -1], vAxis: [0, 1, 0] },
+        { normal: [-1,  0,  0], center: [-half, 0, 0], uAxis: [0, 0, 1], vAxis: [0, 1, 0] },
+        { normal: [ 0,  1,  0], center: [0, half, 0],  uAxis: [1, 0, 0], vAxis: [0, 0, -1] },
+        { normal: [ 0, -1,  0], center: [0, -half, 0], uAxis: [1, 0, 0], vAxis: [0, 0, 1] },
+      ];
+      
+      for (const face of faces) {
+        const { normal, center, uAxis, vAxis } = face;
+        
+        for (let i = 0; i < tilesPerSide; i++) {
+          for (let j = 0; j < tilesPerSide; j++) {
+            const uStart = -half + i * tileSize;
+            const vStart = -half + j * tileSize;
+            
+            const isLight = (i + j) % 2 === 0;
+            const tileColor = isLight ? color1 : color2;
+            
+            const corners = [
+              [uStart, vStart],
+              [uStart + tileSize, vStart],
+              [uStart + tileSize, vStart + tileSize],
+              [uStart, vStart + tileSize]
+            ];
+            
+            const verts3D = corners.map(([u, v]) => {
+              return [
+                center[0] + u * uAxis[0] + v * vAxis[0],
+                center[1] + u * uAxis[1] + v * vAxis[1],
+                center[2] + u * uAxis[2] + v * vAxis[2]
+              ];
+            });
+            
+            positions.push(...verts3D[0], ...verts3D[1], ...verts3D[2]);
+            normals.push(...normal, ...normal, ...normal);
+            colors.push(...tileColor, ...tileColor, ...tileColor);
+            
+            positions.push(...verts3D[0], ...verts3D[2], ...verts3D[3]);
+            normals.push(...normal, ...normal, ...normal);
+            colors.push(...tileColor, ...tileColor, ...tileColor);
+          }
+        }
+      }
+      
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+      geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+      
+      return geometry;
+    }
+
+    function getTileVertices(size, tilesPerSide = 3) {
+      const half = size / 2;
+      const step = size / tilesPerSide;
+
+      const keyOf = (x, y, z) => `${x.toFixed(6)},${y.toFixed(6)},${z.toFixed(6)}`;
+      const seen = new Set();
+      const out = [];
+
+      for (let i = 0; i <= tilesPerSide; i++) {
+        for (let j = 0; j <= tilesPerSide; j++) {
+          const u = -half + i * step;
+          const v = -half + j * step;
+
+          const candidates = [
+            [ half, u, v], [-half, u, v],
+            [ u, half, v], [ u,-half, v],
+            [ u, v, half], [ u, v,-half]
+          ];
+
+          for (const [x, y, z] of candidates) {
+            const k = keyOf(x, y, z);
+            if (!seen.has(k)) {
+              seen.add(k);
+              out.push({ x, y, z });
+            }
+          }
+        }
+      }
+      return out;
+    }
+
+    // =========================================================================
+    // RUDIN-SHAPIRO APERIODIC TILING
+    // =========================================================================
+    function popcount_parity(x) {
+      x ^= x >>> 16;
+      x ^= x >>> 8;
+      x ^= x >>> 4;
+      x &= 0xF;
+      const lut = [0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0];
+      return lut[x];
+    }
+
+    function rudin_shapiro_1d(n) {
+      const result = new Uint8Array(n);
+      for (let k = 0; k < n; k++) {
+        const y = (k & (k >>> 1)) >>> 0;
+        result[k] = popcount_parity(y);
+      }
+      return result;
+    }
+
+    function rudin_shapiro_2d(n) {
+      const a = rudin_shapiro_1d(n);
+      const grid = [];
+      for (let i = 0; i < n; i++) {
+        grid[i] = new Uint8Array(n);
+        for (let j = 0; j < n; j++) {
+          grid[i][j] = a[i] ^ a[j];
+        }
+      }
+      return grid;
+    }
+
+    const RS_CACHE = { grid: null, resolution: 0 };
+
+    function getRudinShapiroGrid(resolution) {
+      if (RS_CACHE.grid === null || RS_CACHE.resolution !== resolution) {
+        RS_CACHE.grid = rudin_shapiro_2d(resolution);
+        RS_CACHE.resolution = resolution;
+      }
+      return RS_CACHE.grid;
+    }
+
+    function getRudinShapiroVertices(size, resolution = 8) {
+      const half = size / 2;
+      const cellSize = size / resolution;
+      const halfCell = cellSize / 2;
+      const grid = getRudinShapiroGrid(resolution);
+
+      const keyOf = (x, y, z) => `${x.toFixed(6)},${y.toFixed(6)},${z.toFixed(6)}`;
+      const seen = new Set();
+      const out = [];
+
+      for (let i = 0; i < resolution; i++) {
+        for (let j = 0; j < resolution; j++) {
+          if (grid[i][j] !== 1) continue;
+
+          const u = -half + i * cellSize + halfCell;
+          const v = -half + j * cellSize + halfCell;
+
+          const candidates = [
+            [half, u, v], [-half, u, v],
+            [u, half, v], [u, -half, v],
+            [u, v, half], [u, v, -half]
+          ];
+
+          for (const [x, y, z] of candidates) {
+            const k = keyOf(x, y, z);
+            if (!seen.has(k)) {
+              seen.add(k);
+              out.push({ x, y, z });
+            }
+          }
+        }
+      }
+      return out;
+    }
+
+    function createRudinShapiroCubeGeometry(size, resolution = 8) {
+      const half = size / 2;
+      const tileSize = size / resolution;
+      const grid = getRudinShapiroGrid(resolution);
+
+      const positions = [];
+      const normals = [];
+      const colors = [];
+
+      const colorActive = [0.15, 0.85, 0.25];
+      const colorInactive = [0.85, 0.15, 0.15];
+
+      const faces = [
+        { normal: [0, 0, 1], center: [0, 0, half], uAxis: [1, 0, 0], vAxis: [0, 1, 0] },
+        { normal: [0, 0, -1], center: [0, 0, -half], uAxis: [-1, 0, 0], vAxis: [0, 1, 0] },
+        { normal: [1, 0, 0], center: [half, 0, 0], uAxis: [0, 0, -1], vAxis: [0, 1, 0] },
+        { normal: [-1, 0, 0], center: [-half, 0, 0], uAxis: [0, 0, 1], vAxis: [0, 1, 0] },
+        { normal: [0, 1, 0], center: [0, half, 0], uAxis: [1, 0, 0], vAxis: [0, 0, -1] },
+        { normal: [0, -1, 0], center: [0, -half, 0], uAxis: [1, 0, 0], vAxis: [0, 0, 1] }
+      ];
+
+      for (const face of faces) {
+        const { normal, center, uAxis, vAxis } = face;
+
+        for (let i = 0; i < resolution; i++) {
+          for (let j = 0; j < resolution; j++) {
+            const uStart = -half + i * tileSize;
+            const vStart = -half + j * tileSize;
+
+            const isActive = grid[i][j] === 1;
+            const tileColor = isActive ? colorActive : colorInactive;
+
+            const corners = [
+              [uStart, vStart],
+              [uStart + tileSize, vStart],
+              [uStart + tileSize, vStart + tileSize],
+              [uStart, vStart + tileSize]
+            ];
+
+            const verts3D = corners.map(([u, v]) => [
+              center[0] + u * uAxis[0] + v * vAxis[0],
+              center[1] + u * uAxis[1] + v * vAxis[1],
+              center[2] + u * uAxis[2] + v * vAxis[2]
+            ]);
+
+            positions.push(...verts3D[0], ...verts3D[1], ...verts3D[2]);
+            normals.push(...normal, ...normal, ...normal);
+            colors.push(...tileColor, ...tileColor, ...tileColor);
+
+            positions.push(...verts3D[0], ...verts3D[2], ...verts3D[3]);
+            normals.push(...normal, ...normal, ...normal);
+            colors.push(...tileColor, ...tileColor, ...tileColor);
+          }
+        }
+      }
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+      geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+      return geometry;
+    }
+
+    // =========================
+    // TILED ICOSIDODECAHEDRON (32 faces with Cantor-style tiling)
+    // =========================
+    function createTiledIcosidodecahedronGeometry(size, subdivisions = 3) {
+      const PHI = (1 + Math.sqrt(5)) / 2;
+      const scale = size / 2;
+      
+      const vertices = [];
+      
+      vertices.push([0, 0, PHI], [0, 0, -PHI]);
+      vertices.push([0, PHI, 0], [0, -PHI, 0]);
+      vertices.push([PHI, 0, 0], [-PHI, 0, 0]);
+      
+      const a = 0.5, b = PHI / 2, c = (1 + PHI) / 2;
+      const perms = [
+        [a, b, c], [a, b, -c], [a, -b, c], [a, -b, -c],
+        [-a, b, c], [-a, b, -c], [-a, -b, c], [-a, -b, -c],
+        [b, c, a], [b, c, -a], [b, -c, a], [b, -c, -a],
+        [-b, c, a], [-b, c, -a], [-b, -c, a], [-b, -c, -a],
+        [c, a, b], [c, a, -b], [c, -a, b], [c, -a, -b],
+        [-c, a, b], [-c, a, -b], [-c, -a, b], [-c, -a, -b]
+      ];
+      vertices.push(...perms);
+      
+      for (let v of vertices) {
+        v[0] *= scale; v[1] *= scale; v[2] *= scale;
+      }
+      
+      function dist(a, b) {
+        return Math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2 + (a[2]-b[2])**2);
+      }
+      function sub(a, b) { return [a[0]-b[0], a[1]-b[1], a[2]-b[2]]; }
+      function add(a, b) { return [a[0]+b[0], a[1]+b[1], a[2]+b[2]]; }
+      function mul(a, s) { return [a[0]*s, a[1]*s, a[2]*s]; }
+      function cross(a, b) {
+        return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+      }
+      function normalize(v) {
+        const len = Math.sqrt(v[0]**2 + v[1]**2 + v[2]**2);
+        return len > 0 ? [v[0]/len, v[1]/len, v[2]/len] : [0,0,0];
+      }
+      function dot(a, b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]; }
+      function lerp(a, b, t) {
+        return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
+      }
+      
+      const edgeLen = scale * 1.0;
+      const eps = 0.01 * scale;
+      
+      const triangles = [];
+      for (let i = 0; i < vertices.length; i++) {
+        for (let j = i + 1; j < vertices.length; j++) {
+          if (Math.abs(dist(vertices[i], vertices[j]) - edgeLen) > eps) continue;
+          for (let k = j + 1; k < vertices.length; k++) {
+            if (Math.abs(dist(vertices[i], vertices[k]) - edgeLen) > eps) continue;
+            if (Math.abs(dist(vertices[j], vertices[k]) - edgeLen) > eps) continue;
+            triangles.push([i, j, k]);
+          }
+        }
+      }
+      
+      const adj = [];
+      for (let i = 0; i < vertices.length; i++) {
+        adj[i] = [];
+        for (let j = 0; j < vertices.length; j++) {
+          if (i !== j && Math.abs(dist(vertices[i], vertices[j]) - edgeLen) < eps) {
+            adj[i].push(j);
+          }
+        }
+      }
+      
+      const pentagons = [];
+      const foundPentagons = new Set();
+      
+      for (let start = 0; start < vertices.length; start++) {
+        (function findCycle(path) {
+          if (path.length === 5) {
+            if (adj[path[4]].includes(path[0])) {
+              const sorted = [...path].sort((a,b) => a-b).join(',');
+              if (!foundPentagons.has(sorted)) {
+                const v0 = vertices[path[0]];
+                const v1 = sub(vertices[path[1]], v0);
+                const v2 = sub(vertices[path[2]], v0);
+                const n = normalize(cross(v1, v2));
+                let planar = true;
+                for (let i = 3; i < 5; i++) {
+                  const vi = sub(vertices[path[i]], v0);
+                  if (Math.abs(dot(vi, n)) > eps) { planar = false; break; }
+                }
+                if (planar) {
+                  foundPentagons.add(sorted);
+                  pentagons.push([...path]);
+                }
+              }
+            }
+            return;
+          }
+          for (const next of adj[path[path.length - 1]]) {
+            if (!path.includes(next) && next > start) {
+              path.push(next);
+              findCycle(path);
+              path.pop();
+            }
+          }
+        })([start]);
+      }
+      
+      function orderPentagon(indices) {
+        const verts = indices.map(i => vertices[i]);
+        const center = mul(verts.reduce((acc, v) => add(acc, v), [0,0,0]), 1/5);
+        const v0 = sub(verts[0], center);
+        const v1 = sub(verts[1], center);
+        const normal = normalize(cross(v0, v1));
+        const ref = normalize([...v0]);
+        
+        const angles = indices.map((idx, i) => {
+          const v = sub(verts[i], center);
+          const proj = normalize(sub(v, mul(normal, dot(v, normal))));
+          let angle = Math.acos(Math.max(-1, Math.min(1, dot(proj, ref))));
+          const cp = cross(ref, proj);
+          if (dot(cp, normal) < 0) angle = 2 * Math.PI - angle;
+          return { idx, angle };
+        });
+        angles.sort((a, b) => a.angle - b.angle);
+        return angles.map(a => a.idx);
+      }
+      
+      const positions = [];
+      const normals = [];
+      const colors = [];
+      
+      const colorPalette = {
+        triLight: [0.95, 0.70, 0.20],
+        triDark: [0.15, 0.12, 0.08],
+        pentLight: [0.20, 0.85, 0.95],
+        pentDark: [0.05, 0.15, 0.20],
+      };
+      
+      for (const face of triangles) {
+        const v0 = vertices[face[0]];
+        const v1 = vertices[face[1]];
+        const v2 = vertices[face[2]];
+        
+        const e1 = sub(v1, v0);
+        const e2 = sub(v2, v0);
+        let n = normalize(cross(e1, e2));
+        
+        const center = mul(add(add(v0, v1), v2), 1/3);
+        if (dot(n, center) < 0) n = mul(n, -1);
+        
+        const numDiv = subdivisions;
+        for (let i = 0; i < numDiv; i++) {
+          for (let j = 0; j < numDiv - i; j++) {
+            const k = numDiv - i - j - 1;
+            
+            const b00 = [(i)/numDiv, (j)/numDiv, (k+1)/numDiv];
+            const b10 = [(i+1)/numDiv, (j)/numDiv, (k)/numDiv];
+            const b01 = [(i)/numDiv, (j+1)/numDiv, (k)/numDiv];
+            
+            const p00 = add(add(mul(v0, b00[0]), mul(v1, b00[1])), mul(v2, b00[2]));
+            const p10 = add(add(mul(v0, b10[0]), mul(v1, b10[1])), mul(v2, b10[2]));
+            const p01 = add(add(mul(v0, b01[0]), mul(v1, b01[1])), mul(v2, b01[2]));
+            
+            const isCorner = (i === 0 && j === 0) || (i === numDiv-1) || (j === numDiv-1-i);
+            const tileColor = isCorner ? colorPalette.triLight : colorPalette.triDark;
+            
+            positions.push(...p00, ...p10, ...p01);
+            normals.push(...n, ...n, ...n);
+            colors.push(...tileColor, ...tileColor, ...tileColor);
+            
+            if (i + j < numDiv - 1) {
+              const b11 = [(i+1)/numDiv, (j+1)/numDiv, (k-1)/numDiv];
+              const p11 = add(add(mul(v0, b11[0]), mul(v1, b11[1])), mul(v2, b11[2]));
+              
+              const isMiddle = i > 0 && j > 0 && i + j < numDiv - 2;
+              const invColor = isMiddle ? colorPalette.triDark : colorPalette.triLight;
+              
+              positions.push(...p10, ...p11, ...p01);
+              normals.push(...n, ...n, ...n);
+              colors.push(...invColor, ...invColor, ...invColor);
+            }
+          }
+        }
+      }
+      
+      for (const face of pentagons) {
+        const ordered = orderPentagon(face);
+        const verts = ordered.map(i => vertices[i]);
+        
+        const center = mul(verts.reduce((acc, v) => add(acc, v), [0,0,0]), 1/5);
+        
+        const e1 = sub(verts[0], center);
+        const e2 = sub(verts[1], center);
+        let n = normalize(cross(e1, e2));
+        if (dot(n, center) < 0) n = mul(n, -1);
+        
+        for (let i = 0; i < 5; i++) {
+          const va = verts[i];
+          const vb = verts[(i + 1) % 5];
+          
+          for (let r = 0; r < subdivisions; r++) {
+            const r0 = r / subdivisions;
+            const r1 = (r + 1) / subdivisions;
+            
+            const ca = lerp(center, va, r0);
+            const cb = lerp(center, vb, r0);
+            const na = lerp(center, va, r1);
+            const nb = lerp(center, vb, r1);
+            
+            const isEdge = (r === 0) || (r === subdivisions - 1);
+            const tileColor = isEdge ? colorPalette.pentLight : colorPalette.pentDark;
+            
+            positions.push(...ca, ...na, ...nb);
+            normals.push(...n, ...n, ...n);
+            colors.push(...tileColor, ...tileColor, ...tileColor);
+            
+            positions.push(...ca, ...nb, ...cb);
+            normals.push(...n, ...n, ...n);
+            colors.push(...tileColor, ...tileColor, ...tileColor);
+          }
+        }
+      }
+      
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+      geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+      
+      return geometry;
+    }
+
+    // Get tile vertices from tiled icosidodecahedron (Cantor-style - tile VERTICES)
+    function getTiled32TileVertices(size, subdivisions = 3) {
+      const PHI = (1 + Math.sqrt(5)) / 2;
+      const scale = size / 2;
+      
+      const vertices = [];
+      
+      vertices.push([0, 0, PHI], [0, 0, -PHI]);
+      vertices.push([0, PHI, 0], [0, -PHI, 0]);
+      vertices.push([PHI, 0, 0], [-PHI, 0, 0]);
+      
+      const a = 0.5, b = PHI / 2, c = (1 + PHI) / 2;
+      const perms = [
+        [a, b, c], [a, b, -c], [a, -b, c], [a, -b, -c],
+        [-a, b, c], [-a, b, -c], [-a, -b, c], [-a, -b, -c],
+        [b, c, a], [b, c, -a], [b, -c, a], [b, -c, -a],
+        [-b, c, a], [-b, c, -a], [-b, -c, a], [-b, -c, -a],
+        [c, a, b], [c, a, -b], [c, -a, b], [c, -a, -b],
+        [-c, a, b], [-c, a, -b], [-c, -a, b], [-c, -a, -b]
+      ];
+      vertices.push(...perms);
+      
+      for (let v of vertices) {
+        v[0] *= scale; v[1] *= scale; v[2] *= scale;
+      }
+      
+      function dist(a, b) {
+        return Math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2 + (a[2]-b[2])**2);
+      }
+      function sub(a, b) { return [a[0]-b[0], a[1]-b[1], a[2]-b[2]]; }
+      function add(a, b) { return [a[0]+b[0], a[1]+b[1], a[2]+b[2]]; }
+      function mul(a, s) { return [a[0]*s, a[1]*s, a[2]*s]; }
+      function cross(a, b) {
+        return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+      }
+      function normalize(v) {
+        const len = Math.sqrt(v[0]**2 + v[1]**2 + v[2]**2);
+        return len > 0 ? [v[0]/len, v[1]/len, v[2]/len] : [0,0,0];
+      }
+      function dot(a, b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]; }
+      function lerp(a, b, t) {
+        return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
+      }
+      
+      const edgeLen = scale * 1.0;
+      const eps = 0.01 * scale;
+      
+      // Find triangles and pentagons
+      const triangles = [];
+      for (let i = 0; i < vertices.length; i++) {
+        for (let j = i + 1; j < vertices.length; j++) {
+          if (Math.abs(dist(vertices[i], vertices[j]) - edgeLen) > eps) continue;
+          for (let k = j + 1; k < vertices.length; k++) {
+            if (Math.abs(dist(vertices[i], vertices[k]) - edgeLen) > eps) continue;
+            if (Math.abs(dist(vertices[j], vertices[k]) - edgeLen) > eps) continue;
+            triangles.push([i, j, k]);
+          }
+        }
+      }
+      
+      const adj = [];
+      for (let i = 0; i < vertices.length; i++) {
+        adj[i] = [];
+        for (let j = 0; j < vertices.length; j++) {
+          if (i !== j && Math.abs(dist(vertices[i], vertices[j]) - edgeLen) < eps) {
+            adj[i].push(j);
+          }
+        }
+      }
+      
+      const pentagons = [];
+      const foundPentagons = new Set();
+      
+      for (let start = 0; start < vertices.length; start++) {
+        (function findCycle(path) {
+          if (path.length === 5) {
+            if (adj[path[4]].includes(path[0])) {
+              const sorted = [...path].sort((a,b) => a-b).join(',');
+              if (!foundPentagons.has(sorted)) {
+                const v0 = vertices[path[0]];
+                const v1 = sub(vertices[path[1]], v0);
+                const v2 = sub(vertices[path[2]], v0);
+                const n = normalize(cross(v1, v2));
+                let planar = true;
+                for (let i = 3; i < 5; i++) {
+                  const vi = sub(vertices[path[i]], v0);
+                  if (Math.abs(dot(vi, n)) > eps) { planar = false; break; }
+                }
+                if (planar) {
+                  foundPentagons.add(sorted);
+                  pentagons.push([...path]);
+                }
+              }
+            }
+            return;
+          }
+          for (const next of adj[path[path.length - 1]]) {
+            if (!path.includes(next) && next > start) {
+              path.push(next);
+              findCycle(path);
+              path.pop();
+            }
+          }
+        })([start]);
+      }
+      
+      function orderPentagon(indices) {
+        const verts = indices.map(i => vertices[i]);
+        const center = mul(verts.reduce((acc, v) => add(acc, v), [0,0,0]), 1/5);
+        const v0 = sub(verts[0], center);
+        const v1 = sub(verts[1], center);
+        const normal = normalize(cross(v0, v1));
+        const ref = normalize([...v0]);
+        
+        const angles = indices.map((idx, i) => {
+          const v = sub(verts[i], center);
+          const proj = normalize(sub(v, mul(normal, dot(v, normal))));
+          let angle = Math.acos(Math.max(-1, Math.min(1, dot(proj, ref))));
+          const cp = cross(ref, proj);
+          if (dot(cp, normal) < 0) angle = 2 * Math.PI - angle;
+          return { idx, angle };
+        });
+        angles.sort((a, b) => a.angle - b.angle);
+        return angles.map(a => a.idx);
+      }
+      
+      // Collect tile vertices (like Cantor Dust does with cube faces)
+      const keyOf = (x, y, z) => `${x.toFixed(5)},${y.toFixed(5)},${z.toFixed(5)}`;
+      const seen = new Set();
+      const out = [];
+      
+      // From triangles: barycentric subdivision vertices
+      for (const face of triangles) {
+        const v0 = vertices[face[0]];
+        const v1 = vertices[face[1]];
+        const v2 = vertices[face[2]];
+        
+        for (let i = 0; i <= subdivisions; i++) {
+          for (let j = 0; j <= subdivisions - i; j++) {
+            const k = subdivisions - i - j;
+            const bary = [i/subdivisions, j/subdivisions, k/subdivisions];
+            const p = add(add(mul(v0, bary[0]), mul(v1, bary[1])), mul(v2, bary[2]));
+            const key = keyOf(p[0], p[1], p[2]);
+            if (!seen.has(key)) {
+              seen.add(key);
+              out.push({ x: p[0], y: p[1], z: p[2] });
+            }
+          }
+        }
+      }
+      
+      // From pentagons: radial subdivision vertices
+      for (const face of pentagons) {
+        const ordered = orderPentagon(face);
+        const verts = ordered.map(i => vertices[i]);
+        const center = mul(verts.reduce((acc, v) => add(acc, v), [0,0,0]), 1/5);
+        
+        // Center vertex
+        const centerKey = keyOf(center[0], center[1], center[2]);
+        if (!seen.has(centerKey)) {
+          seen.add(centerKey);
+          out.push({ x: center[0], y: center[1], z: center[2] });
+        }
+        
+        // Radial vertices
+        for (let i = 0; i < 5; i++) {
+          const va = verts[i];
+          const vb = verts[(i + 1) % 5];
+          
+          for (let r = 0; r <= subdivisions; r++) {
+            const t = r / subdivisions;
+            const pa = lerp(center, va, t);
+            const pb = lerp(center, vb, t);
+            
+            for (const p of [pa, pb]) {
+              const key = keyOf(p[0], p[1], p[2]);
+              if (!seen.has(key)) {
+                seen.add(key);
+                out.push({ x: p[0], y: p[1], z: p[2] });
+              }
+            }
+          }
+        }
+      }
+      
+      return out;
+    }
+
+    // =========================
+    // SHAPES DEFINITIONS
+    // =========================
+    const SHAPES = {
+      cube: {
+        name: 'CUBE',
+        children: 8,
+        childScale: 0.45,
+        childOffset: 0.50,
+        baseColor: 0x6666ff,
+        accentColor: '#6666ff',
+        maxDepth: 7,
+        getChildPositions: (size) => {
+          const offset = size * 0.50;
+          const positions = [];
+          for (let x = -1; x <= 1; x += 2) {
+            for (let y = -1; y <= 1; y += 2) {
+              for (let z = -1; z <= 1; z += 2) {
+                positions.push({ x: x * offset, y: y * offset, z: z * offset });
+              }
+            }
+          }
+          return positions;
+        },
+        createGeometry: (size) => new THREE.BoxGeometry(size, size, size),
+        edgeColor: 0x000000
+      },
+
+      octahedron: {
+        name: 'OCTAHEDRON',
+        children: 6,
+        childScale: 0.35,
+        childOffset: 0.50,
+        baseColor: 0x8855aa,
+        accentColor: '#cc66ff',
+        maxDepth: 6,
+        getChildPositions: (size) => {
+          const offset = size * 0.50;
+          return [
+            { x: offset, y: 0, z: 0 }, { x: -offset, y: 0, z: 0 },
+            { x: 0, y: offset, z: 0 }, { x: 0, y: -offset, z: 0 },
+            { x: 0, y: 0, z: offset }, { x: 0, y: 0, z: -offset }
+          ];
+        },
+        createGeometry: (size) => new THREE.OctahedronGeometry(size * 0.7),
+        edgeColor: 0x000000
+      },
+
+      tetrahedron: {
+        name: 'TETRAHEDRON',
+        children: 4,
+        childScale: 0.45,
+        childOffset: 0.40,
+        baseColor: 0xaa8833,
+        accentColor: '#ffaa33',
+        maxDepth: 7,
+        getChildPositions: (size) => {
+          const offset = size * 0.40;
+          const h = offset * Math.sqrt(2/3);
+          const r = offset * Math.sqrt(1/3);
+          return [
+            { x: 0, y: h, z: 0 },
+            { x: r * Math.sqrt(3), y: -h/3, z: 0 },
+            { x: -r * Math.sqrt(3)/2, y: -h/3, z: r * 1.5 },
+            { x: -r * Math.sqrt(3)/2, y: -h/3, z: -r * 1.5 }
+          ];
+        },
+        createGeometry: (size) => new THREE.TetrahedronGeometry(size * 0.8),
+        edgeColor: 0x000000
+      },
+
+      dodecahedron: {
+        name: 'DODECAHEDRON',
+        children: 20,
+        childScale: 0.26,
+        childOffset: 0.70,
+        baseColor: 0x2244aa,
+        accentColor: '#66aaff',
+        maxDepth: 4,
+        _cachedDirs: null,
+        getChildPositions: function(size) {
+          if (!this._cachedDirs) {
+            const g = new THREE.DodecahedronGeometry(1, 0);
+            this._cachedDirs = getUniqueVertexDirections(g, 4);
+            g.dispose();
+          }
+          const offset = size * this.childOffset;
+          return this._cachedDirs.map(d => ({ x: d.x * offset, y: d.y * offset, z: d.z * offset }));
+        },
+        createGeometry: (size) => new THREE.DodecahedronGeometry(size * 0.72, 0),
+        edgeColor: 0x000000
+      },
+
+      irregular: {
+        name: 'IRREGULAR',
+        children: 12,
+        childScale: 0.32,
+        childOffset: 0.62,
+        baseColor: 0x2aa38b,
+        accentColor: '#33ffcc',
+        maxDepth: 5,
+        _cachedDirs: null,
+        _baseGeo: null,
+        _seed: 1337,
+        _rng: function() {
+          this._seed = (this._seed * 1664525 + 1013904223) >>> 0;
+          return this._seed / 4294967296;
+        },
+        _buildBase: function() {
+          const g = new THREE.IcosahedronGeometry(1, 0);
+          const pos = g.attributes.position;
+          const v = new THREE.Vector3();
+          for (let i = 0; i < pos.count; i++) {
+            v.set(pos.getX(i), pos.getY(i), pos.getZ(i));
+            const k = 1.0 + (this._rng() - 0.5) * 0.55;
+            v.multiplyScalar(k);
+            pos.setXYZ(i, v.x, v.y, v.z);
+          }
+          pos.needsUpdate = true;
+          g.computeVertexNormals();
+          this._baseGeo = g;
+          this._cachedDirs = getUniqueVertexDirections(g, 4);
+        },
+        getChildPositions: function(size) {
+          if (!this._cachedDirs || !this._baseGeo) this._buildBase();
+          const offset = size * this.childOffset;
+          return this._cachedDirs.map(d => ({ x: d.x * offset, y: d.y * offset, z: d.z * offset }));
+        },
+        createGeometry: function(size) {
+          if (!this._cachedDirs || !this._baseGeo) this._buildBase();
+          const s = size * 0.78;
+          const g = this._baseGeo.clone();
+          g.scale(s, s, s);
+          return g;
+        },
+        edgeColor: 0x000000
+      },
+
+      truncatedCube: {
+        name: 'TRUNCATED CUBE',
+        children: 24,
+        childScale: 0.17,
+        childOffset: 0.704138,
+        baseColor: 0x44aa88,
+        accentColor: '#66ffaa',
+        maxDepth: 4,
+        _cachedPositions: null,
+        getChildPositions: function(size) {
+          if (!this._cachedPositions) {
+            const t = (Math.sqrt(2) - 1);
+            const dirs = [];
+            for (let sx = -1; sx <= 1; sx += 2) {
+              for (let sy = -1; sy <= 1; sy += 2) {
+                for (let sz = -1; sz <= 1; sz += 2) {
+                  dirs.push(
+                    new THREE.Vector3(sx * (1-t), sy, sz).normalize(),
+                    new THREE.Vector3(sx, sy * (1-t), sz).normalize(),
+                    new THREE.Vector3(sx, sy, sz * (1-t)).normalize()
+                  );
+                }
+              }
+            }
+            this._cachedPositions = dirs;
+          }
+          const offset = size * this.childOffset;
+          return this._cachedPositions.map(d => ({ x: d.x * offset, y: d.y * offset, z: d.z * offset }));
+        },
+        createGeometry: function(size) {
+          return createTruncatedCubeGeometry(size);
+        },
+        edgeColor: 0x000000
+      },
+
+      icosidodecahedron: {
+        name: 'ICOSIDODECAHEDRON',
+        children: 30,
+        childScale: 0.16,
+        childOffset: 0.72,
+        baseColor: 0xffaa33,
+        accentColor: '#ffaa33',
+        maxDepth: 3,
+        _cachedDirs: null,
+        getChildPositions: function(size) {
+          if (!this._cachedDirs) {
+            const PHI = (1 + Math.sqrt(5)) / 2;
+            const dirs = [];
+            dirs.push(new THREE.Vector3(0, 0, PHI).normalize());
+            dirs.push(new THREE.Vector3(0, 0, -PHI).normalize());
+            dirs.push(new THREE.Vector3(0, PHI, 0).normalize());
+            dirs.push(new THREE.Vector3(0, -PHI, 0).normalize());
+            dirs.push(new THREE.Vector3(PHI, 0, 0).normalize());
+            dirs.push(new THREE.Vector3(-PHI, 0, 0).normalize());
+            
+            const a = 0.5, b = PHI / 2, c = (1 + PHI) / 2;
+            const perms = [
+              [a, b, c], [a, b, -c], [a, -b, c], [a, -b, -c],
+              [-a, b, c], [-a, b, -c], [-a, -b, c], [-a, -b, -c],
+              [b, c, a], [b, c, -a], [b, -c, a], [b, -c, -a],
+              [-b, c, a], [-b, c, -a], [-b, -c, a], [-b, -c, -a],
+              [c, a, b], [c, a, -b], [c, -a, b], [c, -a, -b],
+              [-c, a, b], [-c, a, -b], [-c, -a, b], [-c, -a, -b]
+            ];
+            for (const p of perms) {
+              dirs.push(new THREE.Vector3(p[0], p[1], p[2]).normalize());
+            }
+            this._cachedDirs = dirs;
+          }
+          const offset = size * this.childOffset;
+          return this._cachedDirs.map(d => ({ x: d.x * offset, y: d.y * offset, z: d.z * offset }));
+        },
+        createGeometry: function(size) {
+          return createTiledIcosidodecahedronGeometry(size, 1);
+        },
+        edgeColor: 0x000000
+      },
+
+      cantorDust: {
+        name: 'CANTOR DUST',
+        children: 0,
+        childScale: 0.20,
+        childOffset: 2/3,
+        baseColor: 0xff3366,
+        accentColor: '#ff3366',
+        maxDepth: 6,
+        tilesPerSide: 3,
+        getChildPositions: function(size) {
+          const verts = getTileVertices(size, this.tilesPerSide);
+          const shrink = 0.95;
+          return verts.map(p => ({
+            x: p.x * shrink,
+            y: p.y * shrink,
+            z: p.z * shrink
+          }));
+        },
+        createGeometry: function(size) {
+          return createTiledCubeGeometry(size, this.tilesPerSide);
+        },
+        edgeColor: 0x000000
+      },
+
+      // 9. TILED 32-HEDRON (original - simple vertices)
+      tiled32: {
+        name: 'TILED 32-HEDRON',
+        children: 30,
+        childScale: 0.18,
+        childOffset: 0.75,
+        baseColor: 0x00ffaa,
+        accentColor: '#00ffcc',
+        maxDepth: 3,
+        tilesPerFace: 3,
+        _cachedDirs: null,
+        getChildPositions: function(size) {
+          if (!this._cachedDirs) {
+            const PHI = (1 + Math.sqrt(5)) / 2;
+            const dirs = [];
+            dirs.push(new THREE.Vector3(0, 0, PHI).normalize());
+            dirs.push(new THREE.Vector3(0, 0, -PHI).normalize());
+            dirs.push(new THREE.Vector3(0, PHI, 0).normalize());
+            dirs.push(new THREE.Vector3(0, -PHI, 0).normalize());
+            dirs.push(new THREE.Vector3(PHI, 0, 0).normalize());
+            dirs.push(new THREE.Vector3(-PHI, 0, 0).normalize());
+            
+            const a = 0.5, b = PHI / 2, c = (1 + PHI) / 2;
+            const perms = [
+              [a, b, c], [a, b, -c], [a, -b, c], [a, -b, -c],
+              [-a, b, c], [-a, b, -c], [-a, -b, c], [-a, -b, -c],
+              [b, c, a], [b, c, -a], [b, -c, a], [b, -c, -a],
+              [-b, c, a], [-b, c, -a], [-b, -c, a], [-b, -c, -a],
+              [c, a, b], [c, a, -b], [c, -a, b], [c, -a, -b],
+              [-c, a, b], [-c, a, -b], [-c, -a, b], [-c, -a, -b]
+            ];
+            for (const p of perms) {
+              dirs.push(new THREE.Vector3(p[0], p[1], p[2]).normalize());
+            }
+            this._cachedDirs = dirs;
+          }
+          const offset = size * this.childOffset;
+          const shrink = 0.85;
+          return this._cachedDirs.map(d => ({
+            x: d.x * offset * shrink,
+            y: d.y * offset * shrink,
+            z: d.z * offset * shrink
+          }));
+        },
+        createGeometry: function(size) {
+          return createTiledIcosidodecahedronGeometry(size, this.tilesPerFace);
+        },
+        edgeColor: 0x000000
+      },
+
+      // 10. ★ TILED32 v2 - Cantor-style (tile VERTICES as children)
+      tiled32v2: {
+        name: 'TILED32 v2',
+        children: 0,  // Dynamic - calculated from tile vertices
+        // This shape uses a dense set of tile-vertices as child anchors.
+        // The previous value (0.12) caused overlaps between siblings at deeper recursion.
+        // 0.07 is a conservative non-overlapping scale for tilesPerFace=3.
+        childScale: 0.07,
+        childOffset: 1.0,
+        baseColor: 0xff00ff,
+        accentColor: '#ff66ff',
+        maxDepth: 3,
+        tilesPerFace: 3,
+        _cachedVerts: null,
+        getChildPositions: function(size) {
+          if (!this._cachedVerts) {
+            this._cachedVerts = getTiled32TileVertices(1.0, this.tilesPerFace);
+          }
+          const shrink = 0.88;
+          return this._cachedVerts.map(p => ({
+            x: p.x * size * shrink,
+            y: p.y * size * shrink,
+            z: p.z * size * shrink
+          }));
+        },
+        createGeometry: function(size) {
+          return createTiledIcosidodecahedronGeometry(size, this.tilesPerFace);
+        },
+        edgeColor: 0x000000
+      },
+
+      // 11. ★ RUDIN-SHAPIRO - Aperiodic fractal
+      rudinShapiro: {
+        name: 'RUDIN-SHAPIRO',
+        children: 0,
+        childScale: 0.08,
+        childOffset: 1.0,
+        baseColor: 0x22dd44,
+        accentColor: '#22dd44',
+        maxDepth: 4,
+        resolution: 8,
+        getChildPositions: function(size) {
+          const verts = getRudinShapiroVertices(size, this.resolution);
+          const shrink = 0.88;
+          return verts.map(p => ({
+            x: p.x * shrink,
+            y: p.y * shrink,
+            z: p.z * shrink
+          }));
+        },
+        createGeometry: function(size) {
+          return createRudinShapiroCubeGeometry(size, this.resolution);
+        },
+        edgeColor: 0x000000
+      }
+    };
+
+    let currentShape = 'tiled32';
+
+    const CONFIG = {
+      BASE_SIZE: 2.0,
+      MOVE_SPEED: 0.06,
+      LOOK_SPEED: 0.002,
+      MAX_INSTANCES_PER_GROUP: 60000,
+      EDGE_CUTOFF: 4000,
+      SHAPE_SPACING: 0.92
+    };
+
+    let scene, camera, renderer;
+    let currentDepth = 0;
+    let zoomProgress = 0;
+
+    let camX = 0, camY = 0, camZ = 8;
+    let camYaw = 0, camPitch = 0;
+
+    let keys = {};
+    let isDragging = false;
+    let lastMouseX = 0, lastMouseY = 0;
+
+    let pendingDepth = null;
+    let disposable = [];
+
+    function getMaxDepthForCurrentShape() {
+      return SHAPES[currentShape].maxDepth;
+    }
+
+    function getDynamicChildrenCount(shapeKey, size) {
+      if (shapeKey === 'cantorDust') {
+        return getTileVertices(size, SHAPES.cantorDust.tilesPerSide).length;
+      }
+      if (shapeKey === 'tiled32v2') {
+        if (!SHAPES.tiled32v2._cachedVerts) {
+          SHAPES.tiled32v2._cachedVerts = getTiled32TileVertices(1.0, SHAPES.tiled32v2.tilesPerFace);
+        }
+        return SHAPES.tiled32v2._cachedVerts.length;
+      }
+      if (shapeKey === 'rudinShapiro') {
+        return getRudinShapiroVertices(size, SHAPES.rudinShapiro.resolution).length;
+      }
+      return SHAPES[shapeKey].children;
+    }
+
+    function updateGeometryPanel() {
+      const shape = SHAPES[currentShape];
+      const childrenCount = getDynamicChildrenCount(currentShape, CONFIG.BASE_SIZE);
+      const geo = GEOMETRY_INFO[currentShape];
+      
+      document.getElementById('geo-faces').textContent = geo.faces;
+      document.getElementById('geo-edges').textContent = geo.edges;
+      document.getElementById('geo-vertices').textContent = geo.vertices;
+      document.getElementById('geo-type').textContent = geo.type;
+      
+      document.getElementById('geo-coords').innerHTML = geo.formula;
+      document.getElementById('coords-calculation').innerHTML = geo.calculations;
+      document.getElementById('coords-toggle').classList.remove('open');
+      document.getElementById('coords-details').classList.remove('open');
+      
+      document.getElementById('geo-tri').textContent = geo.triangles;
+      
+      if (geo.octagons > 0) {
+        document.getElementById('geo-pent-label').textContent = 'Octagons';
+        document.getElementById('geo-pent').textContent = geo.octagons;
+      } else if (geo.squares > 0) {
+        document.getElementById('geo-pent-label').textContent = 'Squares';
+        document.getElementById('geo-pent').textContent = geo.squares;
+      } else {
+        document.getElementById('geo-pent-label').textContent = 'Pentagons';
+        document.getElementById('geo-pent').textContent = geo.pentagons;
+      }
+      
+      document.getElementById('geo-vconfig').textContent = geo.vertexConfig;
+      
+      document.getElementById('geo-children').textContent = childrenCount;
+      document.getElementById('geo-scale').textContent = shape.childScale;
+      document.getElementById('geo-maxdepth').textContent = shape.maxDepth;
+      
+      const hausdorff = Math.log(childrenCount) / Math.log(1 / shape.childScale);
+      document.getElementById('geo-hausdorff').textContent = hausdorff.toFixed(2);
+    }
+
+    function generateShapesData(targetDepth) {
+      const shape = SHAPES[currentShape];
+      const numChildren = getDynamicChildrenCount(currentShape, CONFIG.BASE_SIZE);
+
+      const byColor = {};
+      const isTiled = currentShape === 'cantorDust' || currentShape === 'tiled32v2' || currentShape === 'rudinShapiro';
+      
+      if (isTiled) {
+        byColor[-1] = [];
+      } else {
+        for (let i = 0; i < numChildren; i++) byColor[i] = [];
+        byColor[-1] = [];
+      }
+
+      let shapeCount = 0;
+      const maxShapes = CONFIG.MAX_INSTANCES_PER_GROUP;
+
+      function recurse(cx, cy, cz, size, depth, clusterId) {
+        if (shapeCount >= maxShapes) return;
+        
+        if (depth === targetDepth) {
+          const colorKey = isTiled ? -1 : ((targetDepth === 0) ? -1 : clusterId);
+          byColor[colorKey].push({ cx, cy, cz, size });
+          shapeCount++;
+          return;
+        }
+        if (depth > targetDepth) return;
+
+        const childSize = size * shape.childScale;
+        const positions = shape.getChildPositions(size);
+
+        for (let idx = 0; idx < positions.length; idx++) {
+          if (shapeCount >= maxShapes) return;
+          const pos = positions[idx];
+          const newClusterId = isTiled ? -1 : ((depth === 0) ? idx : clusterId);
+          recurse(cx + pos.x, cy + pos.y, cz + pos.z, childSize, depth + 1, newClusterId);
+        }
+      }
+
+      if (targetDepth === 0) {
+        byColor[-1].push({ cx: 0, cy: 0, cz: 0, size: CONFIG.BASE_SIZE });
+      } else {
+        recurse(0, 0, 0, CONFIG.BASE_SIZE, 0, 0);
+      }
+
+      return byColor;
+    }
+
+    function getViewScale() {
+      const shape = SHAPES[currentShape];
+      const baseScale = Math.pow(1 / shape.childScale, currentDepth);
+      const nextScale = Math.pow(1 / shape.childScale, currentDepth + 1);
+      return baseScale + (nextScale - baseScale) * zoomProgress;
+    }
+
+    function clearScene() {
+      for (const obj of disposable) {
+        scene.remove(obj);
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) {
+          if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+          else obj.material.dispose();
+        }
+      }
+      disposable = [];
+    }
+
+    function addEdgesIfSmall(mesh, geometry, edgeColor) {
+      if (mesh.isInstancedMesh) return;
+      const edges = new THREE.EdgesGeometry(geometry);
+      const lineMat = new THREE.LineBasicMaterial({ color: edgeColor });
+      const wire = new THREE.LineSegments(edges, lineMat);
+      wire.position.copy(mesh.position);
+      wire.rotation.copy(mesh.rotation);
+      scene.add(wire);
+      disposable.push(wire);
+    }
+
+    function rebuildDepthLabels() {
+      const container = document.getElementById('depth-labels');
+      container.innerHTML = '';
+      const maxD = getMaxDepthForCurrentShape();
+
+      for (let d = maxD; d >= 0; d--) {
+        const el = document.createElement('div');
+        el.className = 'depth-label-v' + (d === 0 ? ' active' : '');
+        el.dataset.d = String(d);
+        el.textContent = String(d);
+        container.appendChild(el);
+      }
+    }
+
+    function updateScene() {
+      clearScene();
+
+      const shape = SHAPES[currentShape];
+      const childrenCount = getDynamicChildrenCount(currentShape, CONFIG.BASE_SIZE);
+      const viewScale = getViewScale();
+      const maxD = getMaxDepthForCurrentShape();
+
+      const shapesData = generateShapesData(currentDepth);
+
+      let totalShapes = 0;
+
+      const isTiled = currentShape === 'cantorDust' || currentShape === 'tiled32v2' || currentShape === 'rudinShapiro';
+      const colorKeys = [-1];
+      if (!isTiled) {
+        for (let i = 0; i < shape.children; i++) colorKeys.push(i);
+      }
+
+      const tmpMat4 = new THREE.Matrix4();
+      const tmpPos = new THREE.Vector3();
+      const tmpQuat = new THREE.Quaternion();
+      const tmpScale = new THREE.Vector3();
+
+      const expectedCount = currentDepth === 0 ? 1 : Math.pow(childrenCount, currentDepth);
+      const drawEdges = expectedCount <= CONFIG.EDGE_CUTOFF;
+
+      const currentOpacity = 1.0 - zoomProgress * 0.85;
+
+      for (const colorKey of colorKeys) {
+        const shapes = shapesData[colorKey];
+        if (!shapes || shapes.length === 0) continue;
+
+        totalShapes += shapes.length;
+
+        const color = (colorKey === -1)
+          ? shape.baseColor
+          : CLUSTER_COLORS[colorKey % CLUSTER_COLORS.length];
+
+        const useInstancing = shapes.length > 150;
+
+        if (!useInstancing) {
+          for (const s of shapes) {
+            const worldX = s.cx * viewScale;
+            const worldY = s.cy * viewScale;
+            const worldZ = s.cz * viewScale;
+            const worldSize = s.size * viewScale * CONFIG.SHAPE_SPACING;
+
+            const geo = shape.createGeometry(worldSize);
+            const useVertexColors = geo.attributes.color !== undefined;
+            const mat = new THREE.MeshLambertMaterial({ 
+              color: useVertexColors ? 0xffffff : color,
+              vertexColors: useVertexColors,
+              transparent: currentOpacity < 1,
+              opacity: currentOpacity,
+              depthWrite: currentOpacity > 0.5,
+              side: THREE.DoubleSide
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(worldX, worldY, worldZ);
+
+            scene.add(mesh);
+            disposable.push(mesh);
+
+            if (drawEdges && currentOpacity > 0.3 && !useVertexColors) {
+              addEdgesIfSmall(mesh, geo, shape.edgeColor);
+            }
+          }
+        } else {
+          const first = shapes[0];
+          const worldSize = first.size * viewScale * CONFIG.SHAPE_SPACING;
+
+          const geo = shape.createGeometry(worldSize);
+          const useVertexColors = geo.attributes.color !== undefined;
+          const mat = new THREE.MeshLambertMaterial({ 
+            color: useVertexColors ? 0xffffff : color,
+            vertexColors: useVertexColors,
+            transparent: currentOpacity < 1,
+            opacity: currentOpacity,
+            depthWrite: currentOpacity > 0.5,
+            side: THREE.DoubleSide
+          });
+
+          const count = Math.min(shapes.length, CONFIG.MAX_INSTANCES_PER_GROUP);
+          const inst = new THREE.InstancedMesh(geo, mat, count);
+
+          for (let i = 0; i < count; i++) {
+            const s = shapes[i];
+            tmpPos.set(s.cx * viewScale, s.cy * viewScale, s.cz * viewScale);
+            tmpQuat.set(0, 0, 0, 1);
+            tmpScale.set(1, 1, 1);
+            tmpMat4.compose(tmpPos, tmpQuat, tmpScale);
+            inst.setMatrixAt(i, tmpMat4);
+          }
+          inst.instanceMatrix.needsUpdate = true;
+
+          scene.add(inst);
+          disposable.push(inst);
+        }
+      }
+
+      // Next depth preview
+      if (zoomProgress > 0.08 && currentDepth < maxD) {
+        const nextShapesData = generateShapesData(currentDepth + 1);
+        const nextOpacity = Math.min(0.95, zoomProgress * 1.1);
+        const nextExpectedCount = Math.pow(childrenCount, currentDepth + 1);
+        const nextDrawEdges = nextExpectedCount <= CONFIG.EDGE_CUTOFF && nextOpacity > 0.4;
+
+        for (const colorKey of colorKeys) {
+          const shapes = nextShapesData[colorKey];
+          if (!shapes || shapes.length === 0) continue;
+
+          const color = (colorKey === -1)
+            ? shape.baseColor
+            : CLUSTER_COLORS[colorKey % CLUSTER_COLORS.length];
+
+          const useInstancing = shapes.length > 150;
+
+          if (!useInstancing) {
+            for (const s of shapes) {
+              const worldX = s.cx * viewScale;
+              const worldY = s.cy * viewScale;
+              const worldZ = s.cz * viewScale;
+              const worldSize = s.size * viewScale * CONFIG.SHAPE_SPACING;
+
+              const dx = worldX - camX;
+              const dy = worldY - camY;
+              const dz = worldZ - camZ;
+              const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+              if (dist > 80 || worldSize < 0.008) continue;
+
+              const geo = shape.createGeometry(worldSize);
+              const useVertexColors = geo.attributes.color !== undefined;
+              const mat = new THREE.MeshLambertMaterial({ 
+                color: useVertexColors ? 0xffffff : color,
+                vertexColors: useVertexColors,
+                transparent: true,
+                opacity: nextOpacity,
+                depthWrite: false,
+                side: THREE.DoubleSide
+              });
+              const mesh = new THREE.Mesh(geo, mat);
+              mesh.position.set(worldX, worldY, worldZ);
+              mesh.renderOrder = -1;
+
+              scene.add(mesh);
+              disposable.push(mesh);
+
+              if (nextDrawEdges && !useVertexColors) {
+                addEdgesIfSmall(mesh, geo, shape.edgeColor);
+              }
+            }
+          } else {
+            const first = shapes[0];
+            const worldSize = first.size * viewScale * CONFIG.SHAPE_SPACING;
+
+            const geo = shape.createGeometry(worldSize);
+            const useVertexColors = geo.attributes.color !== undefined;
+            const mat = new THREE.MeshLambertMaterial({ 
+              color: useVertexColors ? 0xffffff : color,
+              vertexColors: useVertexColors,
+              transparent: true,
+              opacity: nextOpacity,
+              depthWrite: false,
+              side: THREE.DoubleSide
+            });
+
+            const count = Math.min(shapes.length, CONFIG.MAX_INSTANCES_PER_GROUP);
+            const inst = new THREE.InstancedMesh(geo, mat, count);
+            inst.renderOrder = -1;
+
+            for (let i = 0; i < count; i++) {
+              const s = shapes[i];
+              tmpPos.set(s.cx * viewScale, s.cy * viewScale, s.cz * viewScale);
+              tmpQuat.set(0, 0, 0, 1);
+              tmpScale.set(1, 1, 1);
+              tmpMat4.compose(tmpPos, tmpQuat, tmpScale);
+              inst.setMatrixAt(i, tmpMat4);
+            }
+            inst.instanceMatrix.needsUpdate = true;
+
+            scene.add(inst);
+            disposable.push(inst);
+          }
+        }
+      }
+
+      const expectedShapes = currentDepth === 0 ? 1 : Math.pow(childrenCount, currentDepth);
+
+      document.getElementById('depth-value').textContent = currentDepth;
+      document.getElementById('cubes-value').textContent = totalShapes.toLocaleString();
+      document.getElementById('formula-value').textContent =
+        currentDepth === 0 ? `${childrenCount}⁰ = 1` : `${childrenCount}^${currentDepth} = ${expectedShapes.toLocaleString()}`;
+
+      document.getElementById('zoom-fill').style.width = (zoomProgress * 100) + '%';
+      document.getElementById('current-d').textContent = currentDepth;
+      document.getElementById('next-d').textContent = Math.min(currentDepth + 1, maxD);
+
+      document.getElementById('depth-fill').style.height =
+        ((currentDepth + zoomProgress) / maxD * 100) + '%';
+
+      document.querySelectorAll('.depth-label-v').forEach(el => {
+        const d = parseInt(el.dataset.d, 10);
+        el.classList.toggle('active', d <= currentDepth);
+      });
+    }
+
+    function setShape(shapeName) {
+      currentShape = shapeName;
+      currentDepth = 0;
+      zoomProgress = 0;
+
+      const shape = SHAPES[shapeName];
+      document.getElementById('shape-subtitle').textContent = shape.name + ' RECURSION';
+
+      document.querySelectorAll('.shape-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.shape === shapeName);
+      });
+
+      rebuildDepthLabels();
+      updateGeometryPanel();
+      updateScene();
+    }
+
+    function showModal(newDepth, direction) {
+      if (pendingDepth !== null) return;
+
+      const maxD = getMaxDepthForCurrentShape();
+      if (newDepth < 0 || newDepth > maxD) return;
+
+      pendingDepth = newDepth;
+
+      const childrenCount = getDynamicChildrenCount(currentShape, CONFIG.BASE_SIZE);
+      const shapesCount = newDepth === 0 ? 1 : Math.pow(childrenCount, newDepth);
+
+      document.getElementById('modal-title').textContent =
+        direction === 'in' ? 'ENTER NEXT LEVEL?' : 'GO BACK?';
+      document.getElementById('modal-depth').textContent = `DEPTH ${newDepth}`;
+      document.getElementById('modal-cubes').textContent = shapesCount.toLocaleString();
+      document.getElementById('modal-confirm').textContent =
+        direction === 'in' ? 'DIVE IN' : 'GO BACK';
+
+      document.getElementById('modal').classList.add('active');
+    }
+
+    function hideModal() {
+      document.getElementById('modal').classList.remove('active');
+      pendingDepth = null;
+    }
+
+    function confirmDepthChange() {
+      if (pendingDepth === null) return;
+
+      currentDepth = pendingDepth;
+      zoomProgress = 0;
+
+      document.getElementById('flash').classList.add('active');
+      setTimeout(() => document.getElementById('flash').classList.remove('active'), 250);
+
+      hideModal();
+      updateScene();
+    }
+
+    function handleZoom(delta) {
+      if (pendingDepth !== null) return;
+
+      const maxD = getMaxDepthForCurrentShape();
+      zoomProgress += delta * 0.06;
+
+      if (zoomProgress >= 1.0) {
+        zoomProgress = 0.95;
+        if (currentDepth < maxD) showModal(currentDepth + 1, 'in');
+      } else if (zoomProgress < 0) {
+        zoomProgress = 0.05;
+        if (currentDepth > 0) {
+          showModal(currentDepth - 1, 'out');
+        } else {
+          zoomProgress = 0;
+        }
+      }
+      updateScene();
+    }
+
+    function init() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x020206);
+
+      camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.01, 700);
+      camera.position.set(camX, camY, camZ);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+      scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+
+      const dir1 = new THREE.DirectionalLight(0xffffff, 0.6);
+      dir1.position.set(3, 5, 4);
+      scene.add(dir1);
+
+      const dir2 = new THREE.DirectionalLight(0xcc66ff, 0.2);
+      dir2.position.set(-2, -3, 2);
+      scene.add(dir2);
+
+      rebuildDepthLabels();
+      updateGeometryPanel();
+      setupInput();
+      updateScene();
+      animate();
+    }
+
+    function setupInput() {
+      document.getElementById('geometry-toggle').addEventListener('click', function() {
+        this.classList.toggle('open');
+        document.getElementById('geometry-content').classList.toggle('open');
+      });
+
+      document.getElementById('coords-toggle').addEventListener('click', function() {
+        this.classList.toggle('open');
+        document.getElementById('coords-details').classList.toggle('open');
+        const textSpan = this.querySelector('span:first-child');
+        textSpan.textContent = this.classList.contains('open') ? 'HIDE CALCULATIONS' : 'SHOW CALCULATIONS';
+      });
+
+      document.querySelectorAll('.shape-btn').forEach(btn => {
+        btn.addEventListener('click', () => setShape(btn.dataset.shape));
+      });
+
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'Escape' && pendingDepth !== null) { hideModal(); return; }
+        if (e.code === 'Enter' && pendingDepth !== null) { confirmDepthChange(); return; }
+        if (e.code === 'KeyR' && pendingDepth === null) { resetView(); return; }
+
+        if (e.code === 'Digit1') { setShape('cube'); return; }
+        if (e.code === 'Digit2') { setShape('octahedron'); return; }
+        if (e.code === 'Digit3') { setShape('tetrahedron'); return; }
+        if (e.code === 'Digit4') { setShape('dodecahedron'); return; }
+        if (e.code === 'Digit5') { setShape('irregular'); return; }
+        if (e.code === 'Digit6') { setShape('truncatedCube'); return; }
+        if (e.code === 'Digit7') { setShape('icosidodecahedron'); return; }
+        if (e.code === 'Digit8') { setShape('cantorDust'); return; }
+        if (e.code === 'Digit9') { setShape('tiled32'); return; }
+        if (e.code === 'Digit0') { setShape('tiled32v2'); return; }
+        if (e.code === 'Minus') { setShape('rudinShapiro'); return; }
+
+        keys[e.code] = true;
+      });
+
+      window.addEventListener('keyup', (e) => keys[e.code] = false);
+
+      renderer.domElement.addEventListener('mousedown', (e) => {
+        if (pendingDepth !== null) return;
+        isDragging = true;
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+      });
+
+      window.addEventListener('mouseup', () => isDragging = false);
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isDragging || pendingDepth !== null) return;
+
+        camYaw   -= (e.clientX - lastMouseX) * CONFIG.LOOK_SPEED;
+        camPitch -= (e.clientY - lastMouseY) * CONFIG.LOOK_SPEED;
+        camPitch = Math.max(-1.5, Math.min(1.5, camPitch));
+
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+      });
+
+      renderer.domElement.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        handleZoom(e.deltaY < 0 ? 1 : -1);
+      }, { passive: false });
+
+      document.getElementById('modal-confirm').addEventListener('click', confirmDepthChange);
+      document.getElementById('modal-cancel').addEventListener('click', hideModal);
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+    }
+
+    function getCameraForward() {
+      return {
+        x: Math.sin(camYaw) * Math.cos(camPitch),
+        y: Math.sin(camPitch),
+        z: -Math.cos(camYaw) * Math.cos(camPitch)
+      };
+    }
+
+    function getCameraRight() {
+      return { x: Math.cos(camYaw), y: 0, z: Math.sin(camYaw) };
+    }
+
+    function resetView() {
+      camX = 0; camY = 0; camZ = 8;
+      camYaw = 0; camPitch = 0;
+      currentDepth = 0;
+      zoomProgress = 0;
+
+      document.getElementById('flash').classList.add('active');
+      setTimeout(() => document.getElementById('flash').classList.remove('active'), 200);
+
+      rebuildDepthLabels();
+      updateScene();
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      if (pendingDepth === null) {
+        const viewScale = getViewScale();
+        const baseSpeed = (keys['ShiftLeft'] || keys['ShiftRight'])
+          ? CONFIG.MOVE_SPEED * 3
+          : CONFIG.MOVE_SPEED;
+        const speed = baseSpeed * viewScale;
+
+        const fwd = getCameraForward();
+        const right = getCameraRight();
+
+        if (keys['KeyW']) { camX += fwd.x * speed; camY += fwd.y * speed; camZ += fwd.z * speed; }
+        if (keys['KeyS']) { camX -= fwd.x * speed; camY -= fwd.y * speed; camZ -= fwd.z * speed; }
+        if (keys['KeyA']) { camX -= right.x * speed; camZ -= right.z * speed; }
+        if (keys['KeyD']) { camX += right.x * speed; camZ += right.z * speed; }
+        if (keys['KeyQ']) { camY -= speed; }
+        if (keys['KeyE']) { camY += speed; }
+      }
+
+      camera.position.set(camX, camY, camZ);
+      camera.rotation.order = 'YXZ';
+      camera.rotation.y = camYaw;
+      camera.rotation.x = camPitch;
+
+      renderer.render(scene, camera);
+    }
+
+    init();
+  </script>
+</body>
+</html>
